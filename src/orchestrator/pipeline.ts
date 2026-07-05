@@ -1,25 +1,16 @@
-// src/orchestrator/pipeline.ts
-//
-// The orchestrator. This is the piece that actually runs the multi-agent
-// system end to end: Planner -> Data Agent -> Analyst <-> Critic (retry
-// loop) -> Writer.
-//
-// Design choice: this file takes an optional `onEvent` callback so the
-// frontend can stream a live "agent activity feed" (per the PRD) via SSE.
-// The orchestrator doesn't know or care HOW events are displayed — it just
-// reports what's happening, when it happens.
-
+import { runGuardrail, OutOfScopeError } from "@/agents/guardrail";
 import { runPlanner } from "@/agents/planner";
 import { fetchFinancialsForPlan } from "@/lib/financialApi";
 import { runAnalyst, reviseFinding } from "@/agents/analyst";
 import { runCritic } from "@/agents/critic";
 import { runWriter } from "@/agents/writer";
 import { DraftFinding, FinalReport } from "@/types/agentContracts";
+import { cache, CACHE_TTL } from "@/lib/cache";
 
 const MAX_REVISION_ROUNDS = 2;
 
 export interface PipelineEvent {
-  agent: "Planner" | "DataAgent" | "Analyst" | "Critic" | "Writer" | "Orchestrator";
+  agent: "Cache" | "Guardrail" | "Planner" | "DataAgent" | "Analyst" | "Critic" | "Writer" | "Orchestrator";
   message: string;
   timestamp: number;
 }
@@ -28,6 +19,10 @@ export type OnEvent = (event: PipelineEvent) => void;
 
 function emit(onEvent: OnEvent | undefined, agent: PipelineEvent["agent"], message: string) {
   onEvent?.({ agent, message, timestamp: Date.now() });
+}
+
+function normalizeQueryForCache(query: string): string {
+  return query.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 /**
@@ -41,6 +36,18 @@ export async function runPipeline(
   userQuery: string,
   onEvent?: OnEvent
 ): Promise<FinalReport> {
+
+  const cacheKey = `report:${normalizeQueryForCache(userQuery)}`;
+  const cachedReport = cache.get<FinalReport>(cacheKey);
+  if (cachedReport) {
+    emit(onEvent, "Cache", "Served from cache — identical question asked recently");
+    return cachedReport;
+  }
+
+  emit(onEvent, "Guardrail", "Checking query is in scope...");
+  await runGuardrail(userQuery); // throws OutOfScopeError if not — propagates up to the caller (route.ts)
+  emit(onEvent, "Guardrail", "Query approved");
+
   // 1. PLANNER
   emit(onEvent, "Planner", `Interpreting query: "${userQuery}"`);
   const plan = await runPlanner(userQuery);
@@ -147,6 +154,8 @@ export async function runPipeline(
       `${droppedFindings.length} potential finding(s) were excluded from this report because they could not be verified against the source data.`
     );
   }
+
+  cache.set(cacheKey, report, CACHE_TTL.FULL_REPORT);
 
   emit(onEvent, "Writer", `Report complete`);
   return report;

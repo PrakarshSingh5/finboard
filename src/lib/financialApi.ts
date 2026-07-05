@@ -1,4 +1,5 @@
 import { FinancialDataset } from "@/types/agentContracts";
+import { cache, CACHE_TTL } from "@/lib/cache";
 
 const FMP_BASE_URL = "https://financialmodelingprep.com/stable";
 
@@ -50,6 +51,16 @@ export async function fetchFinancials(
   period: "quarterly" | "annual" = "quarterly",
   limit: number = 4
 ): Promise<FinancialDataset[string]> {
+  // Cache key includes every parameter that affects the result. Sorting
+  // metrics before joining means ["revenue","grossMargin"] and
+  // ["grossMargin","revenue"] hit the SAME cache entry — the order a user
+  // (or the Planner) happened to list metrics in shouldn't matter.
+  const cacheKey = `financials:${ticker}:${[...metrics].sort().join(",")}:${period}:${limit}`;
+  const cached = cache.get<FinancialDataset[string]>(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   const apiKey = process.env.FINANCIAL_API_KEY;
   if (!apiKey) {
     throw new Error("FINANCIAL_API_KEY is not set in environment variables");
@@ -116,13 +127,11 @@ export async function fetchFinancials(
     }
   }
 
+  cache.set(cacheKey, dataset, CACHE_TTL.FINANCIAL_DATA);
   return dataset;
 }
 
-/**
- * Fetches financials for multiple tickers in parallel and assembles the
- * full FinancialDataset keyed by ticker, ready to hand to the Analyst Agent.
- */
+
 export async function fetchFinancialsForPlan(
   tickers: string[],
   metrics: string[],
