@@ -1,10 +1,3 @@
-// src/components/charts/MetricChart.tsx
-//
-// Recharts defaults (grid lines, axis text, tooltip background) are all
-// tuned for a light background out of the box — that's why the charts in
-// the screenshot looked washed out on a dark page. Every visual property
-// here is explicitly set to match our token palette instead of relying on
-// Recharts' defaults.
 
 "use client";
 
@@ -24,9 +17,6 @@ interface MetricChartProps {
   spec: ChartSpec;
 }
 
-// Ties back to the palette: signal (amber) first, then gain/loss-adjacent
-// hues, so multi-company comparisons stay legible and on-brand rather than
-// using Recharts' default rainbow palette.
 const LINE_COLORS = ["#E3A438", "#5FAE8C", "#6E8CAE", "#C1584C"];
 
 export function MetricChart({ spec }: MetricChartProps) {
@@ -72,7 +62,10 @@ export function MetricChart({ spec }: MetricChartProps) {
               fontSize: 12,
             }}
             labelStyle={{ color: "#8B9096" }}
-            formatter={(value: number) => `${(value * 100).toFixed(1)}%`}
+            formatter={(value) => {
+              const num = typeof value === "number" ? value : Number(value);
+              return Number.isFinite(num) ? `${(num * 100).toFixed(1)}%` : "—";
+            }}
           />
           <Legend wrapperStyle={{ fontSize: 12, fontFamily: "var(--font-jetbrains-mono)" }} />
           {spec.series.map((s, i) => (
