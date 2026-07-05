@@ -92,7 +92,7 @@ export async function fetchFinancials(
     // /stable responses use `fiscalYear`; some records may still only have
     // `calendarYear` (e.g. older/legacy data), so fall back to be safe.
     const year = row.fiscalYear ?? row.calendarYear;
-    const periodLabel = period === "quarterly" ? `${row.period}-${year}` : year;
+    const periodLabel = period === "quarterly" ? `${row.period}-${year}` : (year ?? "unknown-year");
 
     for (const metric of metrics) {
       let value: number | null = null;
@@ -131,7 +131,10 @@ export async function fetchFinancials(
   return dataset;
 }
 
-
+/**
+ * Fetches financials for multiple tickers in parallel and assembles the
+ * full FinancialDataset keyed by ticker, ready to hand to the Analyst Agent.
+ */
 export async function fetchFinancialsForPlan(
   tickers: string[],
   metrics: string[],
