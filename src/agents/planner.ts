@@ -32,17 +32,18 @@ Ticker rules:
     HCL Technologies -> HCLTECH.NS
     Bajaj Finance -> BAJFINANCE.NS
     Maruti Suzuki -> MARUTI.NS
-    Tata Motors -> TATAMOTORS.NS
+    Tata Motors / Tata Motors Passenger Vehicles -> TMPV.NS   (NOTE: Tata Motors restructured; TATAMOTORS.NS has no fundamentals data — use TMPV.NS)
+    Tata Motors Commercial Vehicles -> TMCV.NS
+    Tata Power -> TATAPOWER.NS
     Asian Paints -> ASIANPAINT.NS
     Zomato -> ZOMATO.NS
     Paytm / One 97 Communications -> PAYTM.NS
     Nykaa / FSN E-Commerce -> NYKAA.NS
     Ola Electric -> OLAELEC.NS
-    Lenskart -> (private company, not listed — use the closest publicly traded peer if possible)
+    Lenskart — private company (no NSE listing); the Guardrail should have caught this before reaching the Planner.
   If the user names an Indian company that you know is NSE-listed but is not in the list above,
   use your best knowledge of the NSE ticker and append ".NS".
-- If the user names a company that is private or not publicly traded, pick the closest
-  publicly listed peer and note it is a proxy.
+- NEVER make up or guess a ticker for a company you are not confident is publicly listed. If uncertain, use the company name as the ticker and append ".NS" as a best effort — the data layer will return empty and the report will note the gap.
 
 Report type rules:
 - If the user mentions two or more companies, or uses words like "compare" or "vs", use reportType "comparison".

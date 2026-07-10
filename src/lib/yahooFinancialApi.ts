@@ -67,6 +67,19 @@ const DERIVED_YAHOO_METRIC_MAP: Record<
 };
 
 // ---------------------------------------------------------------------------
+// Defensive ticker alias map
+// When Yahoo restructures or a ticker is delisted/split, map the stale ticker
+// to its current replacement so we never silently return empty data.
+// The Planner prompt is the authoritative source — this is a last-resort fallback.
+// ---------------------------------------------------------------------------
+const TICKER_ALIASES: Record<string, string> = {
+  // Tata Motors demerged in 2024; TATAMOTORS.NS no longer has fundamentals on Yahoo.
+  // TMPV.NS = Tata Motors Passenger Vehicles (the primary consumer-facing entity).
+  "TATAMOTORS.NS": "TMPV.NS",
+};
+
+
+// ---------------------------------------------------------------------------
 // Helper: format a period label from a Date
 // ---------------------------------------------------------------------------
 
@@ -98,9 +111,16 @@ export async function fetchYahooFinancials(
   period: "quarterly" | "annual" = "quarterly",
   limit: number = 4
 ): Promise<FinancialDataset[string]> {
-  const cacheKey = `yahoo:${ticker}:${[...metrics].sort().join(",")}:${period}:${limit}`;
+  // Redirect any stale/restructured tickers to their current replacements.
+  const resolvedTicker = TICKER_ALIASES[ticker.toUpperCase()] ?? ticker;
+  if (resolvedTicker !== ticker) {
+    console.warn(`[Yahoo] Ticker alias: ${ticker} → ${resolvedTicker}`);
+  }
+
+  const cacheKey = `yahoo:${resolvedTicker}:${[...metrics].sort().join(",")}:${period}:${limit}`;
   const cached = cache.get<FinancialDataset[string]>(cacheKey);
   if (cached) return cached;
+
 
   // Go back far enough to cover `limit` periods. 4 quarters ≈ 1 year back;
   // 4 annual periods ≈ 5 years back. We use a generous window then slice.
@@ -114,7 +134,7 @@ export async function fetchYahooFinancials(
 
   try {
     const yf = new YahooFinance({ suppressNotices: ["yahooSurvey"] });
-    const result = await yf.fundamentalsTimeSeries(ticker, {
+    const result = await yf.fundamentalsTimeSeries(resolvedTicker, {
       period1: period1.toISOString().split("T")[0],
       type: yahooType,
       module: "financials",
@@ -130,7 +150,7 @@ export async function fetchYahooFinancials(
       .slice(0, limit);
   } catch (err) {
     throw new Error(
-      `Yahoo Finance API request failed for ${ticker}: ${
+      `Yahoo Finance API request failed for ${resolvedTicker}: ${
         err instanceof Error ? err.message : String(err)
       }`
     );
@@ -138,7 +158,7 @@ export async function fetchYahooFinancials(
 
   if (rows.length === 0) {
     throw new Error(
-      `Yahoo Finance returned no income statement data for ${ticker}. ` +
+      `Yahoo Finance returned no income statement data for ${resolvedTicker}. `+
         `This may be a coverage gap — try a well-established large-cap (e.g. RELIANCE.NS, TCS.NS).`
     );
   }
@@ -166,8 +186,8 @@ export async function fetchYahooFinancials(
 
       const isDerived = metric in DERIVED_YAHOO_METRIC_MAP;
       const source = isDerived
-        ? `Yahoo:income-statement:${ticker}:${periodLabel}:derived(${metric})`
-        : `Yahoo:income-statement:${ticker}:${periodLabel}`;
+        ? `Yahoo:income-statement:${resolvedTicker}:${periodLabel}:derived(${metric})`
+        : `Yahoo:income-statement:${resolvedTicker}:${periodLabel}`;
 
       dataset.push({ metric, period: periodLabel, value, source });
     }
