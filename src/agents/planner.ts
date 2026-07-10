@@ -11,7 +11,7 @@ Your ONLY job is to convert a user's question into a JSON object matching this e
 
 {
   "reportType": "single-company" | "comparison" | "risk-analysis",
-  "companies": string[],   // stock ticker symbols, e.g. ["AAPL"], NOT company names
+  "companies": string[],   // stock ticker symbols — see ticker rules below
   "metrics": string[],     // choose only from: "revenue", "netIncome", "grossProfit", "grossMargin", "operatingIncome", "operatingMargin", "ebitda"
   "timeframe": {
     "period": "quarterly" | "annual",
@@ -19,10 +19,37 @@ Your ONLY job is to convert a user's question into a JSON object matching this e
   }
 }
 
-Rules:
-- Always convert company names to their real stock ticker symbol (Tesla -> TSLA, Apple -> AAPL, Nvidia -> NVDA, etc).
+Ticker rules:
+- For US-listed companies, use the plain exchange ticker (Tesla -> TSLA, Apple -> AAPL, Nvidia -> NVDA, Microsoft -> MSFT, etc).
+- For Indian companies listed on the NSE, ALWAYS append the ".NS" suffix to the ticker symbol.
+  Examples of Indian company → NSE ticker mappings:
+    Reliance Industries -> RELIANCE.NS
+    TCS / Tata Consultancy Services -> TCS.NS
+    Infosys -> INFY.NS
+    HDFC Bank -> HDFCBANK.NS
+    ICICI Bank -> ICICIBANK.NS
+    Wipro -> WIPRO.NS
+    HCL Technologies -> HCLTECH.NS
+    Bajaj Finance -> BAJFINANCE.NS
+    Maruti Suzuki -> MARUTI.NS
+    Tata Motors -> TATAMOTORS.NS
+    Asian Paints -> ASIANPAINT.NS
+    Zomato -> ZOMATO.NS
+    Paytm / One 97 Communications -> PAYTM.NS
+    Nykaa / FSN E-Commerce -> NYKAA.NS
+    Ola Electric -> OLAELEC.NS
+    Lenskart -> (private company, not listed — use the closest publicly traded peer if possible)
+  If the user names an Indian company that you know is NSE-listed but is not in the list above,
+  use your best knowledge of the NSE ticker and append ".NS".
+- If the user names a company that is private or not publicly traded, pick the closest
+  publicly listed peer and note it is a proxy.
+
+Report type rules:
 - If the user mentions two or more companies, or uses words like "compare" or "vs", use reportType "comparison".
 - If the user asks about risk, concerns, red flags, or "should I be worried", use reportType "risk-analysis" and include metrics relevant to financial health (e.g. netIncome, operatingMargin).
+- Otherwise use "single-company".
+
+Other rules:
 - If unsure about timeframe, default to { "period": "quarterly", "range": 4 }.
 - Only pick metrics from the allowed list above — never invent a new metric name.
 - Respond with ONLY the JSON object. No explanation, no markdown code fences, no extra text.`;

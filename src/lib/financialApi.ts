@@ -1,5 +1,6 @@
 import { FinancialDataset } from "@/types/agentContracts";
 import { cache, CACHE_TTL } from "@/lib/cache";
+import { fetchYahooFinancials } from "@/lib/yahooFinancialApi";
 
 const FMP_BASE_URL = "https://financialmodelingprep.com/stable";
 
@@ -131,9 +132,41 @@ export async function fetchFinancials(
   return dataset;
 }
 
+// ---------------------------------------------------------------------------
+// Routing layer — the ONLY place in the codebase that knows two providers exist
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns true for NSE-listed Indian tickers that the Planner emits with a
+ * .NS suffix (e.g. "RELIANCE.NS"). Everything else routes to FMP.
+ */
+function isIndianTicker(ticker: string): boolean {
+  return ticker.toUpperCase().endsWith(".NS");
+}
+
+/**
+ * Single routing decision point: dispatches to Yahoo Finance for .NS tickers
+ * and to FMP for everything else. The Analyst, Critic, and Writer never call
+ * this directly — they only ever see the resulting FinancialDataset.
+ */
+async function fetchFromCorrectProvider(
+  ticker: string,
+  metrics: string[],
+  period: "quarterly" | "annual",
+  limit: number
+): Promise<FinancialDataset[string]> {
+  if (isIndianTicker(ticker)) {
+    return fetchYahooFinancials(ticker, metrics, period, limit);
+  }
+  return fetchFinancials(ticker, metrics, period, limit);
+}
+
 /**
  * Fetches financials for multiple tickers in parallel and assembles the
  * full FinancialDataset keyed by ticker, ready to hand to the Analyst Agent.
+ *
+ * Automatically routes Indian (.NS) tickers to Yahoo Finance and US tickers
+ * to FMP — callers don't need to know two providers exist.
  */
 export async function fetchFinancialsForPlan(
   tickers: string[],
@@ -141,7 +174,9 @@ export async function fetchFinancialsForPlan(
   period: "quarterly" | "annual" = "quarterly"
 ): Promise<FinancialDataset> {
   const results = await Promise.allSettled(
-    tickers.map((ticker) => fetchFinancials(ticker, metrics, period))
+    tickers.map((ticker) =>
+      fetchFromCorrectProvider(ticker, metrics, period, 4)
+    )
   );
 
   const dataset: FinancialDataset = {};
